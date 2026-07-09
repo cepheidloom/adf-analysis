@@ -11,24 +11,19 @@ from azure.mgmt.datafactory.models import (
 )
 import yaml
 # --- Configuration ---
-with open("config.yaml", "r") as f:
+with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
     config_yaml = yaml.safe_load(f)
     
 SUBSCRIPTION_ID = config_yaml["subscription_id"]
 RESOURCE_GROUP = config_yaml["resource_group"]
 FACTORY_NAME = config_yaml["factory_name"]
 
-LOOKBACK_DAYS = 30
+LOOKBACK_DAYS = 45
 
-PIPELINES_TO_SKIP = [
-    "MG_IN_Streaming_Alerts",
-    "Graylog_LRS_Affiliate_Servers_2",
-    "ADF-DB_LOCK_LOG",
-    "AT_IN_SITE_USER_COUNT_RAW"
-]
+PIPELINES_TO_SKIP = []
 
-OUTPUT_FILE = f"{FACTORY_NAME}_runs.jsonl"
-CHECKPOINT_FILE = f"{FACTORY_NAME}_checkpoint.json"
+OUTPUT_FILE = f"_DATA_AND_OUTPUTS/{FACTORY_NAME}_runs.jsonl"
+CHECKPOINT_FILE = f"_DATA_AND_OUTPUTS/{FACTORY_NAME}_checkpoint.json"
 
 # --- Helpers ---
 def save_checkpoint(token, runs_written, pages_fetched):
