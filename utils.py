@@ -70,16 +70,18 @@ def scan_activity_types(act_lis: list, output_set: set):
             scan_activity_types(actv["activities"], output_set)
 
         output_set.add(actv["type"])
-    
+
 
 def get_activity_type_set(adf_json: dict) -> set:
 
     activities_type_set = set()
     for pl in adf_json["pipelines"]:
-        scan_activity_types(adf_json["pipelines"][pl]["activities"], activities_type_set)
-    
+        scan_activity_types(
+            adf_json["pipelines"][pl]["activities"], activities_type_set
+        )
+
     return activities_type_set
-        
+
 
 def scan_activities(act_lis: list, output_list: list):
     for actv in act_lis:
@@ -144,7 +146,11 @@ def analyze_lookup(lookup_sp_getvar_json: dict) -> dict:
                     else:
                         query_text = sql_query
 
-                    queries["Lookup"]["sql_reader_query"].append(query_text)
+                    queries["Lookup"]["sql_reader_query"].append(
+                        {"sql_reader_query": query_text,
+                         "dataset_reference_name": i["dataset"]["reference_name"]
+                         }
+                    )
                 except Exception as e:
                     sql_sp_name = i["source"]["sql_reader_stored_procedure_name"]
                     sql_sp_param = i["source"]["stored_procedure_parameters"]
@@ -152,6 +158,7 @@ def analyze_lookup(lookup_sp_getvar_json: dict) -> dict:
                         {
                             "sql_reader_stored_procedure_name": sql_sp_name,
                             "stored_procedure_parameters": sql_sp_param,
+                            "dataset_reference_name": i["dataset"]["reference_name"],
                         }
                     )
 
@@ -183,6 +190,7 @@ def analyze_lookup(lookup_sp_getvar_json: dict) -> dict:
                 {
                     "stored_procedure_name": sp_name,
                     "stored_procedure_parameters": sp_params,
+                    "linked_service_name": i["linked_service_name"]["reference_name"],
                 }
             )
 
@@ -229,19 +237,19 @@ if __name__ == "__main__":
     # # ##################
     # print_trigger_info(adf_json)
 
-    # # ##############################################################
-    # # Get Activities(Lookup, SqlServerStoredProcedure, Script)
-    # # ##############################################################
-    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
-    #     json.dump(get_lookup_sp_var_activities(adf_json),f, indent=4)
+    # ##############################################################
+    # Get Activities(Lookup, SqlServerStoredProcedure, Script)
+    # ##############################################################
+    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
+        json.dump(get_lookup_sp_var_activities(adf_json), f, indent=4)
 
-    # ##########################
-    # # Get queries and sp names
-    # ##########################
-    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
-    #     lookup_sp_getvar_json = json.load(f)
+    ##########################
+    # Get queries and sp names
+    ##########################
+    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
+        lookup_sp_getvar_json = json.load(f)
 
-    # with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
-    #     json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
+    with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
+        json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
 
-    print(get_activity_type_set(adf_json))
+    # print(get_activity_type_set(adf_json))
