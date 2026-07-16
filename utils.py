@@ -1,18 +1,47 @@
 import pandas as pd
 import json
 import yaml
+from collections import defaultdict
 
+#########################################################################################
+#################################@@@ PRINT FUNCTIONS @@@#################################
+#########################################################################################
 
-def get_pipeline_names(adf_json: dict) -> list:
-    pl_list = []
-    for pl in adf_json["pipelines"]:
+def print_linked_service_analysis(adf_json: dict):
+    # count = 0
+    set_type = dict()
+    for ls in adf_json["linked_services"]:
+        # print(adf_json["linked_services"][ls]["properties"]["type"])
         try:
-            fol_name = adf_json["pipelines"][pl]["folder"]["name"]
+            set_type[adf_json["linked_services"][ls]["properties"]["type"]] += 1
         except Exception as e:
-            fol_name = ""
-        pl_list.append([pl, fol_name])
+            set_type[adf_json["linked_services"][ls]["properties"]["type"]] = 1
+    list_type = sorted(set_type.items(), key=lambda item: item[1], reverse=True)
+    for key,value in list_type:
+        print( key,"-->", value)
+    
+def print_linked_service_type_properties(adf_json: dict):
+    top_level_fields = set()
+    property_level_fields = set()
+    for ls in adf_json["linked_services"]:
+        for fie in adf_json["linked_services"][ls]:
+            top_level_fields.add(fie)
+        for ty_fie in adf_json["linked_services"][ls]["properties"]:
+                property_level_fields.add(ty_fie)
+    print("*"*10, "Linked Services Top level fields", "*"*10)
+    for i in top_level_fields: print(i)
+    print("-"*70,"\n"+"-"*70)
+    print("*"*10, "Linked Services Property level fields","*"*10)
+    for i in property_level_fields: print(i)
 
-    return pl_list
+def print_basic_information_of_factory(adf_json: dict):
+    print(f"Stats for factory: {adf_json["factory_name"]}")
+    print(f"Total Linked Services: {len(adf_json["linked_services"])}")
+    print(f"Total Datasets: {len(adf_json["datasets"])}")
+    print(f"Total Pipelines: {len(adf_json["pipelines"])}")
+    print(f"Total Data Flows: {len(adf_json["data_flows"])}")
+    print(f"Total Triggers: {len(adf_json["triggers"])}")
+    print(f"Total Integration Runtimes: {len(adf_json["integration_runtimes"])}")
 
 
 def print_trigger_info(adf_json: dict):
@@ -41,6 +70,90 @@ def print_trigger_info(adf_json: dict):
                 "---->",
                 len(adf_json["triggers"][trigger]["properties"]["pipelines"]),
             )
+#########################################################################################
+#################################@@@ END print functions END @@@#########################
+#########################################################################################
+
+   
+def export_linked_services_to_excel(adf_json: dict):
+    # Tracking for summary sheet
+    top_level_fields = set() 
+    property_level_fields = set() 
+    type_counts = defaultdict(int)
+
+    ls_grouped_by_type = {}
+    for ls_name, ls_data in adf_json["linked_services"].items():
+        for field in ls_data:
+            top_level_fields.add(field)
+
+        properties = ls_data["properties"]
+        ls_type = properties["type"]
+        
+        type_counts[ls_type] += 1
+
+        row_data = {"linked_service_name": ls_name}
+        for key,value in properties.items():
+            property_level_fields.add(key)
+            if isinstance(value,(dict, list)):
+                row_data[key] = json.dumps(value)
+            else:
+                row_data[key] = value
+        if ls_type not in ls_grouped_by_type:
+            ls_grouped_by_type[ls_type] = []
+        ls_grouped_by_type[ls_type].append(row_data)
+
+    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Linked_services.xlsx", engine='openpyxl') as writer:
+        summary_sheet_name = "Summary"
+        sorted_counts = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)
+        df_counts = pd.DataFrame(sorted_counts, columns=["Linked Service Type", "Count"])
+
+        df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
+        df_top = pd.DataFrame(sorted(list(top_level_fields)), columns=["Top Level Fields"])
+        df_prop = pd.DataFrame(sorted(list(property_level_fields)), columns=["Property Level Fields"])
+
+        df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
+        df_top.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=3)
+        df_prop.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=5)
+
+        worksheet = writer.sheets[summary_sheet_name]
+        for col in worksheet.columns:
+            max_length = 0
+            column_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if cell.value and len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except Exception:
+                    pass
+            worksheet.column_dimensions[column_letter].width = max_length + 2
+
+
+        # ==========================================
+        # 2. WRITE INDIVIDUAL TYPE SHEETS
+        # ==========================================
+        for ls_type, rows in ls_grouped_by_type.items():
+            df = pd.DataFrame(rows)
+            df.fillna("None", inplace=True)
+            sheet_name = ls_type[:31]
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+
+def get_pipeline_names(adf_json: dict, print_or_output: bool) -> list:
+    pl_list = []
+    for pl in adf_json["pipelines"]:
+        try:
+            fol_name = adf_json["pipelines"][pl]["folder"]["name"]
+        except Exception as e:
+            fol_name = ""
+        pl_list.append([pl, fol_name])
+    
+    if print_or_output:
+        for i in pl_list: print(i)
+    else:
+        df = pd.DataFrame(pl_list, columns=['pipeline', 'folder'])
+        df.to_excel("_DATA_AND_OUTPUTS/presentable_outputs/pipelines.xlsx", index=False, sheet_name = "pipelines")
+
+
 
 
 def scan_activity_types(act_lis: list, output_set: set):
@@ -229,27 +342,33 @@ if __name__ == "__main__":
     # # ##################
     # # Get Pipeline Names
     # # ##################
-    # df = pd.DataFrame(get_pipeline_names(adf_json), columns=['pipeline', 'folder'])
-    # df.to_excel("_DATA_AND_OUTPUTS/presentable_outputs/pipelines.xlsx", index=False, sheet_name = "pipelines")
+
 
     # # ##################
     # # Print Trigger info
     # # ##################
     # print_trigger_info(adf_json)
 
-    # ##############################################################
-    # Get Activities(Lookup, SqlServerStoredProcedure, Script)
-    # ##############################################################
-    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
-        json.dump(get_lookup_sp_var_activities(adf_json), f, indent=4)
+    # # ##############################################################
+    # # Get Activities(Lookup, SqlServerStoredProcedure, Script)
+    # # ##############################################################
+    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
+    #     json.dump(get_lookup_sp_var_activities(adf_json), f, indent=4)
 
-    ##########################
-    # Get queries and sp names
-    ##########################
-    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
-        lookup_sp_getvar_json = json.load(f)
+    # ##########################
+    # # Get queries and sp names
+    # ##########################
+    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
+    #     lookup_sp_getvar_json = json.load(f)
 
-    with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
-        json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
+    # with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
+    #     json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
 
     # print(get_activity_type_set(adf_json))
+
+    # # #######################
+    # # Basic Information Analysiss
+    # # #######################
+    # print_basic_information_of_factory(adf_json)
+    # export_linked_services_to_excel(adf_json)
+    get_pipeline_names(adf_json, True)
