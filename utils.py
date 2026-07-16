@@ -241,8 +241,7 @@ def scan_activity_types(act_lis: list, output_set: set):
             except Exception as e:
                 pass
             try:
-                for activs in actv["default_activities"]
-                scan_activity_types(activs)
+                scan_activity_types(actv["default_activities"], output_set)
             except Exception as e:
                 pass
 
@@ -446,5 +445,4 @@ if __name__ == "__main__":
     # #######################
     # Datasets Analysis
     # #######################
-    # export_datasets_to_excel(adf_json)
-    print(get_activity_type_set(adf_json))
+    export_datasets_to_excel(adf_json)
