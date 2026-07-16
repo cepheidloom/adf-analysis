@@ -402,6 +402,88 @@ def analyze_lookup(lookup_sp_getvar_json: dict) -> dict:
     return queries
 
 
+def parse_type_activities(activity_json: dict) -> dict:
+    row_data = {}
+    if activity_json["type"] == "Switch":
+        try:
+            for case in activity_json["cases"]:
+                for activity in case["activities"]:
+                    parse_type_activities(activity)
+        except Exception as e:
+            pass
+        try:
+            for activity in activity_json["default_activities"]:
+                parse_type_activities(activity)
+        except Exception as e:
+            pass
+
+    elif activity_json["type"] == "IfCondition":
+        try:
+            for activity in activity_json["if_true_activities"]:
+                parse_type_activities(activity)
+        except Exception as e:
+            pass
+        try:
+            for activity in activity_json["if_false_activities"]:
+                parse_type_activities(activity)
+        except Exception as e:
+            pass
+
+    elif activity_json["type"] == "ForEach" or activity_json["type"] == "Until":
+            for activity in activity_json["activities"]:
+                parse_type_activities(activity)
+    
+    
+    for key,value in activity_json.items():
+        if key == "parameters":
+            stacked_params = []
+            for pm_name, pm_val in value.items():
+                if isinstance(pm_val,dict):
+                    clean_val = pm_val["value"]
+                else:
+                    clean_val = pm_val
+                stacked_params.append(f"{pm_name}: {clean_val}")
+            row_data[key] = "\n".join(stacked_params)
+            continue
+        if key == "dataset":
+            row_data[key] = value["reference_name"]
+            continue
+        if key == "linked_service_name":
+            row_data[key] = value["reference_name"]
+            continue
+        if activity_json["type"] == "ExecutePipeline":
+            if key== "pipeline":
+                row_data[key] = value["reference_name"]
+                continue
+        row_data[key] = value
+    return row_data
+
+
+def activity_analysis(adf_json: dict):
+    # top_level_fields = set()
+    # activity_fields = set()
+    # activity_types = set()
+    activity_grouped_by_type = {}
+    for pl_name, pl_content in adf_json["pipelines"].items():
+        # top_level_fields.update(pl_content.keys())
+        for acti in pl_content["activities"]:
+            activity_type = acti["type"]
+            # activity_fields.update(acti.keys())
+            # activity_types.add(acti["type"])
+            row_data = {"pipeline_name": pl_name}
+            row_data.update(parse_type_activities(acti))
+            if activity_type not in activity_grouped_by_type:
+                activity_grouped_by_type[activity_type] = []
+            activity_grouped_by_type[activity_type].append(row_data)
+
+    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/activities.xlsx", engine='openpyxl') as writer:
+        for acti_types,acti_rows in activity_grouped_by_type.items():
+            df = pd.DataFrame(acti_rows)
+            sheet_name = acti_types[:31]
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+
+
 if __name__ == "__main__":
 
     # *****-------------*****
@@ -414,16 +496,6 @@ if __name__ == "__main__":
 
     with open(json_path, "r") as f:
         adf_json = json.load(f)
-
-    # # ##################
-    # # Get Pipeline Names
-    # # ##################
-
-
-    # # ##################
-    # # Print Trigger info
-    # # ##################
-    # print_trigger_info(adf_json)
 
     # # ##############################################################
     # # Get Activities(Lookup, SqlServerStoredProcedure, Script)
@@ -440,9 +512,4 @@ if __name__ == "__main__":
     # with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
     #     json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
 
-    # print(get_activity_type_set(adf_json))s
-
-    # #######################
-    # Datasets Analysis
-    # #######################
-    export_datasets_to_excel(adf_json)
+    activity_analysis(adf_json)
