@@ -1,0 +1,91 @@
+import pandas as pd
+import json
+import yaml
+# from collections import defaultdict
+
+def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list) -> list:
+    rows = []
+    row_data = {"pipeline_name": pipeline_name}
+    row_data["parent_path"] = ">".join(lineage) if lineage else ""
+    row_data["immediate_parent"] = lineage[-1] if lineage else ""
+    row_data["depth"] = len(lineage)
+
+    for key,value in activity_json.items():
+        if key == "parameters":
+            stacked = [f"{k}: {v['value'] if isinstance(v, dict) else v}" for k,v in value.items()]
+            row_data[key] = "\n".join(stacked)
+        elif key in ("dataset", "linked_service_name", "pipeline"):
+            row_data[key] = value["reference_name"]
+        elif key in ("activities", "cases","default_activities","if_true_activities","if_false_activities"):
+            continue
+        else:
+            row_data[key] = value
+
+    rows.append(row_data)
+
+    # --- walk into children (the "tree-walking" part) ---
+    activity_type = activity_json["type"]
+    new_lineage = lineage + [f"{activity_type}: {activity_json.get('name', '')}"]
+
+
+    if activity_type == "Switch":
+        for case in activity_json.get("cases", []):
+            case_lineage = new_lineage[:-1] + [f"Switch case: {case.get('name', '')}"]
+            for child in case.get("activities", []):
+                rows.extend(parse_type_activities(child, pipeline_name, case_lineage))
+        for child in activity_json.get("default_activities", []):
+            rows.extend(parse_type_activities(child, pipeline_name, new_lineage))
+
+
+    elif activity_type == "IfCondition":
+        for child in activity_json.get("if_true_activities", []):
+            rows.extend(parse_type_activities(child, pipeline_name, new_lineage))
+        for child in activity_json.get("if_false_activities", []):
+            rows.extend(parse_type_activities(child, pipeline_name, new_lineage))
+
+    elif activity_type in ("ForEach", "Until"):
+            for child in activity_json.get("activities", []):
+                rows.extend(parse_type_activities(child, pipeline_name, new_lineage))
+
+    return rows    
+    
+
+
+def activity_analysis(adf_json: dict):
+    # top_level_fields = set()
+    activity_types = set()
+    activity_grouped_by_type = {}
+    for pl_name, pl_content in adf_json["pipelines"].items():
+        # top_level_fields.update(pl_content.keys())
+        for acti in pl_content["activities"]:
+            activity_types.add(acti["type"])
+            all_rows = parse_type_activities(acti, pl_name, [])
+            for row in all_rows:
+                activity_type = row["type"]
+                activity_grouped_by_type.setdefault(activity_type, []).append(row)
+               
+    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/activities.xlsx", engine='openpyxl') as writer:
+        for acti_types,acti_rows in activity_grouped_by_type.items():
+            df = pd.DataFrame(acti_rows)
+            sheet_name = acti_types[:31]
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+
+
+if __name__ == "__main__":
+
+    # *****-------------*****
+    # ---- Configuration ----
+    # *****-------------*****
+    with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
+        config_yaml = yaml.safe_load(f)
+
+    json_path = config_yaml["full_extract_path"]
+
+    with open(json_path, "r") as f:
+        adf_json = json.load(f)
+
+    ###################################
+    #######@@@ Function Call @@@#######
+    ###################################
+    activity_analysis(adf_json)

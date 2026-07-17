@@ -74,145 +74,6 @@ def print_trigger_info(adf_json: dict):
 #################################@@@ END print functions END @@@#########################
 #########################################################################################
 
-   
-def export_linked_services_to_excel(adf_json: dict):
-    # Tracking for summary sheet
-    top_level_fields = set() 
-    property_level_fields = set() 
-    type_counts = defaultdict(int)
-
-    ls_grouped_by_type = {}
-    for ls_name, ls_data in adf_json["linked_services"].items():
-        for field in ls_data:
-            top_level_fields.add(field)
-
-        properties = ls_data["properties"]
-        ls_type = properties["type"]
-        
-        type_counts[ls_type] += 1
-
-        row_data = {"linked_service_name": ls_name}
-        for key,value in properties.items():
-            property_level_fields.add(key)
-            if isinstance(value,(dict, list)):
-                row_data[key] = json.dumps(value)
-            else:
-                row_data[key] = value
-        if ls_type not in ls_grouped_by_type:
-            ls_grouped_by_type[ls_type] = []
-        ls_grouped_by_type[ls_type].append(row_data)
-
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Linked_services.xlsx", engine='openpyxl') as writer:
-        summary_sheet_name = "Summary"
-        sorted_counts = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)
-        df_counts = pd.DataFrame(sorted_counts, columns=["Linked Service Type", "Count"])
-
-        df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
-        df_top = pd.DataFrame(sorted(list(top_level_fields)), columns=["Top Level Fields"])
-        df_prop = pd.DataFrame(sorted(list(property_level_fields)), columns=["Property Level Fields"])
-
-        df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
-        df_top.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=3)
-        df_prop.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=5)
-
-        worksheet = writer.sheets[summary_sheet_name]
-        for col in worksheet.columns:
-            max_length = 0
-            column_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except Exception:
-                    pass
-            worksheet.column_dimensions[column_letter].width = max_length + 2
-
-
-        # ==========================================
-        # 2. WRITE INDIVIDUAL TYPE SHEETS
-        # ==========================================
-        for ls_type, rows in ls_grouped_by_type.items():
-            df = pd.DataFrame(rows)
-            df.fillna("None", inplace=True)
-            sheet_name = ls_type[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
-
-
-def export_datasets_to_excel(adf_json: dict):
-    total_dataset_count = len(adf_json["datasets"])
-    top_level_fields = set()
-    property_level_fields = set()
-    type_counts = defaultdict(int)
-
-    ds_grouped_by_type = {}
-    for ds_name, ds_content in adf_json["datasets"].items():
-        top_level_fields.update(ds_content.keys())
-
-        properties = ds_content["properties"]
-        ds_type = properties["type"]
-
-        type_counts[ds_type] += 1
-        property_level_fields.update(properties.keys())
-
-        row_data = {"dataset_name": ds_name}
-        for key,value in properties.items():
-            if isinstance(value, (dict,list)):
-                if key=="linked_service_name":
-                    row_data[key] = value["reference_name"]
-                    continue
-                if key=="folder":
-                    row_data[key] = value["name"]
-                    continue
-                if key == "relative_url":
-                    row_data[key] = value["value"]
-                    continue
-                if key == "location":
-                    stacked_items = []
-                    for loc_key, loc_val in value.items():
-                        if isinstance(loc_val, dict):
-                            loc_val = loc_val["value"]
-                        stacked_items.append(f"{loc_key}: {loc_val}")
-                    row_data[key] = "\n".join(stacked_items)
-                    continue
-                row_data[key] = json.dumps(value)
-            else:
-                row_data[key] = value
-        if ds_type not in ds_grouped_by_type:
-            ds_grouped_by_type[ds_type] = []
-        ds_grouped_by_type[ds_type].append(row_data)
-
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Datasets.xlsx", engine='openpyxl') as writer:
-        summary_sheet_name = "Summary"
-        sorted_counts = sorted(type_counts.items(), key=lambda x:x[1], reverse=True)
-        df_counts = pd.DataFrame(sorted_counts, columns=["Dataset Type", "Count"])
-        df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
-        df_top = pd.DataFrame(sorted(list(top_level_fields)), columns=["Top Level Fields"])
-        df_prop = pd.DataFrame(sorted(list(property_level_fields)), columns=["Property Level Fields"])
-
-        df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
-        df_top.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=3)
-        df_prop.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=5)
-
-        worksheet = writer.sheets[summary_sheet_name]
-        for col in worksheet.columns:
-            max_length = 0
-            column_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except Exception:
-                    pass
-            worksheet.column_dimensions[column_letter].width = max_length + 2
-
-            # ==========================================
-        # 2. WRITE INDIVIDUAL TYPE SHEETS
-        # ==========================================
-        for ds_type, rows in ds_grouped_by_type.items():
-            df = pd.DataFrame(rows)
-            df.fillna("None", inplace=True)
-            sheet_name = ds_type[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
 
 def get_pipeline_names(adf_json: dict, print_or_output: bool) -> list:
     pl_list = []
@@ -228,8 +89,6 @@ def get_pipeline_names(adf_json: dict, print_or_output: bool) -> list:
     else:
         df = pd.DataFrame(pl_list, columns=['pipeline', 'folder'])
         df.to_excel("_DATA_AND_OUTPUTS/presentable_outputs/pipelines.xlsx", index=False, sheet_name = "pipelines")
-
-
 
 
 def scan_activity_types(act_lis: list, output_set: set):
@@ -402,86 +261,6 @@ def analyze_lookup(lookup_sp_getvar_json: dict) -> dict:
     return queries
 
 
-def parse_type_activities(activity_json: dict) -> dict:
-    row_data = {}
-    if activity_json["type"] == "Switch":
-        try:
-            for case in activity_json["cases"]:
-                for activity in case["activities"]:
-                    parse_type_activities(activity)
-        except Exception as e:
-            pass
-        try:
-            for activity in activity_json["default_activities"]:
-                parse_type_activities(activity)
-        except Exception as e:
-            pass
-
-    elif activity_json["type"] == "IfCondition":
-        try:
-            for activity in activity_json["if_true_activities"]:
-                parse_type_activities(activity)
-        except Exception as e:
-            pass
-        try:
-            for activity in activity_json["if_false_activities"]:
-                parse_type_activities(activity)
-        except Exception as e:
-            pass
-
-    elif activity_json["type"] == "ForEach" or activity_json["type"] == "Until":
-            for activity in activity_json["activities"]:
-                parse_type_activities(activity)
-    
-    
-    for key,value in activity_json.items():
-        if key == "parameters":
-            stacked_params = []
-            for pm_name, pm_val in value.items():
-                if isinstance(pm_val,dict):
-                    clean_val = pm_val["value"]
-                else:
-                    clean_val = pm_val
-                stacked_params.append(f"{pm_name}: {clean_val}")
-            row_data[key] = "\n".join(stacked_params)
-            continue
-        if key == "dataset":
-            row_data[key] = value["reference_name"]
-            continue
-        if key == "linked_service_name":
-            row_data[key] = value["reference_name"]
-            continue
-        if activity_json["type"] == "ExecutePipeline":
-            if key== "pipeline":
-                row_data[key] = value["reference_name"]
-                continue
-        row_data[key] = value
-    return row_data
-
-
-def activity_analysis(adf_json: dict):
-    # top_level_fields = set()
-    # activity_fields = set()
-    # activity_types = set()
-    activity_grouped_by_type = {}
-    for pl_name, pl_content in adf_json["pipelines"].items():
-        # top_level_fields.update(pl_content.keys())
-        for acti in pl_content["activities"]:
-            activity_type = acti["type"]
-            # activity_fields.update(acti.keys())
-            # activity_types.add(acti["type"])
-            row_data = {"pipeline_name": pl_name}
-            row_data.update(parse_type_activities(acti))
-            if activity_type not in activity_grouped_by_type:
-                activity_grouped_by_type[activity_type] = []
-            activity_grouped_by_type[activity_type].append(row_data)
-
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/activities.xlsx", engine='openpyxl') as writer:
-        for acti_types,acti_rows in activity_grouped_by_type.items():
-            df = pd.DataFrame(acti_rows)
-            sheet_name = acti_types[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
-
 
 
 if __name__ == "__main__":
@@ -511,5 +290,3 @@ if __name__ == "__main__":
 
     # with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
     #     json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
-
-    activity_analysis(adf_json)
