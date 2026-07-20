@@ -3,6 +3,43 @@ import json
 import yaml
 # from collections import defaultdict
 
+
+def collect_activities_by_type(activity_json: dict, target_type: str, matches: list):
+    """Walks the full nested tree and collects every activity dict matching target_type."""
+    if activity_json.get("type") == target_type:
+        matches.append(activity_json)
+
+    activity_type = activity_json.get("type")
+
+    if activity_type == "Switch":
+        for case in activity_json.get("cases", []):
+            for child in case.get("activities", []):
+                collect_activities_by_type(child, target_type, matches)
+        for child in activity_json.get("default_activities", []):
+            collect_activities_by_type(child, target_type, matches)
+
+    elif activity_type == "IfCondition":
+        for child in activity_json.get("if_true_activities", []):
+            collect_activities_by_type(child, target_type, matches)
+        for child in activity_json.get("if_false_activities", []):
+            collect_activities_by_type(child, target_type, matches)
+
+    elif activity_type in ("ForEach", "Until"):
+        for child in activity_json.get("activities", []):
+            collect_activities_by_type(child, target_type, matches)
+
+    return matches
+
+
+def gather_all_instances(adf_json: dict, target_type: str) -> list:
+    """Runs the collector across every pipeline in the ADF extract."""
+    matches = []
+    for pl_name, pl_content in adf_json["pipelines"].items():
+        for acti in pl_content["activities"]:
+            collect_activities_by_type(acti, target_type, matches)
+    return matches
+
+
 def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list) -> list:
     rows = []
     row_data = {"pipeline_name": pipeline_name}
@@ -16,6 +53,8 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
             row_data[key] = "\n".join(stacked)
         elif key in ("dataset", "linked_service_name", "pipeline"):
             row_data[key] = value["reference_name"]
+        elif key in("stored_procedure_name") and isinstance(value, dict):
+            row_data[key] = value["value"]
         elif key in ("activities", "cases","default_activities","if_true_activities","if_false_activities"):
             continue
         else:
@@ -53,12 +92,10 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
 
 def activity_analysis(adf_json: dict):
     # top_level_fields = set()
-    activity_types = set()
     activity_grouped_by_type = {}
     for pl_name, pl_content in adf_json["pipelines"].items():
         # top_level_fields.update(pl_content.keys())
         for acti in pl_content["activities"]:
-            activity_types.add(acti["type"])
             all_rows = parse_type_activities(acti, pl_name, [])
             for row in all_rows:
                 activity_type = row["type"]
@@ -69,7 +106,6 @@ def activity_analysis(adf_json: dict):
             df = pd.DataFrame(acti_rows)
             sheet_name = acti_types[:31]
             df.to_excel(writer, index=False, sheet_name=sheet_name)
-
 
 
 if __name__ == "__main__":
@@ -89,3 +125,14 @@ if __name__ == "__main__":
     #######@@@ Function Call @@@#######
     ###################################
     activity_analysis(adf_json)
+
+    ################################################
+    #######@@@ Analyze Activity Instances @@@#######
+    ################################################
+    top_level_fields = set()
+    for act in gather_all_instances(adf_json, "ForEach"):
+        top_level_fields.update(act.keys())
+        # for key, item in act.items():
+        #     if key == "stored_procedure_name" and isinstance(item, dict):
+        #         print(key, item)
+    print(top_level_fields)
