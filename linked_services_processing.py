@@ -5,7 +5,7 @@ from collections import defaultdict
 
 def export_linked_services_to_excel(adf_json: dict):
     # Tracking for summary sheet
-    top_level_fields = set() 
+    top_level_fields = set()
     property_level_fields = set() 
     type_counts = defaultdict(int)
 
@@ -18,6 +18,10 @@ def export_linked_services_to_excel(adf_json: dict):
         ls_type = properties["type"]
         
         type_counts[ls_type] += 1
+
+        if "Linked Services Navigation" not in ls_grouped_by_type:
+            ls_grouped_by_type["Linked Services Navigation"] = []
+        ls_grouped_by_type["Linked Services Navigation"].append({"name": ls_name, "type": ls_type})
 
         row_data = {"linked_service_name": ls_name}
         for key,value in properties.items():

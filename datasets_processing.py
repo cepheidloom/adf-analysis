@@ -20,6 +20,10 @@ def export_datasets_to_excel(adf_json: dict):
         type_counts[ds_type] += 1
         property_level_fields.update(properties.keys())
 
+        if "Datasets Navigation" not in ds_grouped_by_type:
+            ds_grouped_by_type["Datasets Navigation"] = []
+        ds_grouped_by_type["Datasets Navigation"].append({"name": ds_name, "type": ds_type})
+        
         row_data = {"dataset_name": ds_name}
         for key,value in properties.items():
             if isinstance(value, (dict,list)):
