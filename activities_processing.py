@@ -66,9 +66,6 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
             row_data[key] = value["value"]
         elif key == "value" and isinstance(value, dict) and value["type"] == "Expression":
             row_data[key] = value["value"]
-        elif key == "dataset" and isinstance(value, dict):
-            row_data["dataset"] = value["reference_name"]
-            row_data["dataset_parameters"] = value["parameters"]
         elif key == "authentication" and isinstance(value, dict):
             # Drill down into password -> store to find the Linked Service
             password = value.get("password", {})
@@ -121,24 +118,97 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
 
     return rows    
     
+def build_navigation_dataframe(master_activity_list: list) -> pd.DataFrame:
+    nav_rows = []
+    
+    for row in master_activity_list:
+        # 1. Extract the base metadata you're already capturing
+        base_info = {
+            "Pipeline Name": row.get("pipeline_name", ""),
+            "Full Path": row.get("parent_path", ""),
+            "Immediate Parent": row.get("immediate_parent", ""),
+            "Depth": row.get("depth", 0),
+            "Activity Name": row.get("name", "Unknown"),
+            "Activity Type": row.get("type", "Unknown")
+        }
+        
+        datasets = set()
+        linked_services = set()
+        
+        # 2. Hunt for Datasets based on your parse_type_activities keys
+        if "inputs_dataset" in row: datasets.add(row["inputs_dataset"])
+        if "outputs_dataset" in row: datasets.add(row["outputs_dataset"])
+        if "dataset" in row: datasets.add(row["dataset"])
+        
+        # 3. Hunt for Linked Services based on your keys
+        if "linked_service_name" in row: linked_services.add(row["linked_service_name"])
+        if "auth_linked_service" in row: linked_services.add(row["auth_linked_service"])
+        
+        # Split out the web_linked_services string (since you formatted it with \n earlier)
+        if "web_linked_services" in row and row["web_linked_services"]:
+            for ls in row["web_linked_services"].split("\n"):
+                if ls.strip():
+                    linked_services.add(ls.strip())
+                    
+        # 4. Generate the unpivoted rows
+        if not datasets and not linked_services:
+            # Independent activity (Wait, SetVariable, etc.)
+            nav_rows.append({**base_info, "Dataset": None, "Linked Service": None})
+        else:
+            for ds in datasets:
+                nav_rows.append({**base_info, "Dataset": ds, "Linked Service": None})
+            for ls in linked_services:
+                nav_rows.append({**base_info, "Dataset": None, "Linked Service": ls})
+                
+    # Return as a DataFrame and drop any accidental duplicates
+    return pd.DataFrame(nav_rows).drop_duplicates()
 
 
 def activity_analysis(adf_json: dict):
-    # top_level_fields = set()
     activity_grouped_by_type = {}
+    master_activity_list = []  # <-- The Interceptor List
+    
     for pl_name, pl_content in adf_json["pipelines"].items():
-        # top_level_fields.update(pl_content.keys())
         for acti in pl_content["activities"]:
+            # Get the parsed rows exactly as you already do
             all_rows = parse_type_activities(acti, pl_name, [])
+            
+            # Intercept all raw rows into our massive flat list before grouping!
+            master_activity_list.extend(all_rows)
+            
             for row in all_rows:
                 activity_type = row["type"]
                 activity_grouped_by_type.setdefault(activity_type, []).append(row)
                
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/activities.xlsx", engine='openpyxl') as writer:
-        for acti_types,acti_rows in activity_grouped_by_type.items():
+    # --- 1. Write the standard Activity groupings (Your existing code) ---
+    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx", engine='openpyxl') as writer:
+        for acti_types, acti_rows in activity_grouped_by_type.items():
             df = pd.DataFrame(acti_rows)
             sheet_name = acti_types[:31]
             df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
+    # --- 2. Write the new Navigation Sheet ---
+    nav_df = build_navigation_dataframe(master_activity_list)
+    
+    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Navigation.xlsx", engine='openpyxl') as nav_writer:
+        # 1. Master Navigation Sheet (Every Activity)
+        nav_df.to_excel(nav_writer, index=False, sheet_name="pipeline_activity_navigation")
+        
+        # 2. Pipeline to Dataset Summary Sheet
+        dataset_rows = (
+            nav_df.dropna(subset=["Dataset"])[["Pipeline Name", "Dataset"]]
+            .drop_duplicates()
+            .sort_values(["Dataset", "Pipeline Name"])
+        )
+        dataset_rows.to_excel(nav_writer, index=False, sheet_name="pipeline_to_dataset")
+        
+        # 3. Pipeline to Linked Service Summary Sheet
+        ls_rows = (
+            nav_df.dropna(subset=["Linked Service"])[["Pipeline Name", "Linked Service"]]
+            .drop_duplicates()
+            .sort_values(["Linked Service", "Pipeline Name"])
+        )
+        ls_rows.to_excel(nav_writer, index=False, sheet_name="pipeline_to_linked_service")
 
 
 if __name__ == "__main__":
