@@ -66,6 +66,28 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
             row_data[key] = value["value"]
         elif key == "value" and isinstance(value, dict) and value["type"] == "Expression":
             row_data[key] = value["value"]
+        elif key == "dataset" and isinstance(value, dict):
+            row_data["dataset"] = value["reference_name"]
+            row_data["dataset_parameters"] = value["parameters"]
+        elif key == "authentication" and isinstance(value, dict):
+            # Drill down into password -> store to find the Linked Service
+            password = value.get("password", {})
+            if isinstance(password, dict):
+                store = password.get("store", {})
+                if isinstance(store, dict):
+                    ls_name = store.get("reference_name", store.get("referenced_name"))
+                    if ls_name:
+                        row_data["auth_linked_service"] = ls_name
+            # Format and retain the entire original authentication dictionary (redundancy kept)
+            row_data[key] = "\n".join([f"{k}: {v}" for k, v in value.items()])
+        elif key == "linked_services" and isinstance(value, list):
+            # Extract all linked service names and join them with a newline
+            extracted_ls = [ls.get("reference_name", ls.get("referenceName", "")) 
+                for ls in value if isinstance(ls, dict)]
+            # Filter out any empty strings just in case
+            extracted_ls = [ls for ls in extracted_ls if ls]
+            if extracted_ls:
+                row_data["web_linked_services"] = "\n".join(extracted_ls)
         elif key in ("activities", "cases","default_activities","if_true_activities","if_false_activities"):
             continue
         else:
