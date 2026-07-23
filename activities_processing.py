@@ -167,8 +167,21 @@ def build_navigation_dataframe(master_activity_list: list) -> pd.DataFrame:
 def activity_analysis(adf_json: dict):
     activity_grouped_by_type = {}
     master_activity_list = []  # <-- The Interceptor List
+    pipeline_summary_rows = []
     
     for pl_name, pl_content in adf_json["pipelines"].items():
+
+        # --- Exract top-level pipeline fields ---
+        pl_row = {"pipeline_name": pl_name}
+        for key, value in pl_content.items():
+            if key not in ("activities", "id", "name", "type", "etag"):
+                if key == "folder":
+                    pl_row[key] = value["name"]
+                    continue
+                pl_row[key] = value
+
+        pipeline_summary_rows.append(pl_row)
+
         for acti in pl_content["activities"]:
             # Get the parsed rows exactly as you already do
             all_rows = parse_type_activities(acti, pl_name, [])
@@ -180,8 +193,12 @@ def activity_analysis(adf_json: dict):
                 activity_type = row["type"]
                 activity_grouped_by_type.setdefault(activity_type, []).append(row)
                
-    # --- 1. Write the standard Activity groupings (Your existing code) ---
     with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx", engine='openpyxl') as writer:
+        # --- Write New Pipeline Summary Sheet ---
+        df_pipelines = pd.DataFrame(pipeline_summary_rows)
+        df_pipelines.to_excel(writer, index=False, sheet_name="pipeline_summary")
+
+        # --- Write Activity Sheets ---
         for acti_types, acti_rows in activity_grouped_by_type.items():
             df = pd.DataFrame(acti_rows)
             sheet_name = acti_types[:31]
