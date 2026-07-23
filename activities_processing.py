@@ -58,7 +58,7 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
             row_data[key] = {k: v for k,v in value.items() if k!= "type"}
         ################## Copy ################## 
         elif key == "parameters":
-            stacked = [f"{k}: {v['value'] if isinstance(v, dict) else v}" for k,v in value.items()]
+            stacked = [f"• {k} => {v['value'] if isinstance(v, dict) else v}" for k,v in value.items()]
             row_data[key] = "\n".join(stacked)
         elif key in ("dataset", "linked_service_name", "pipeline"):
             row_data[key] = value["reference_name"]
@@ -178,6 +178,21 @@ def activity_analysis(adf_json: dict):
                 if key == "folder":
                     pl_row[key] = value["name"]
                     continue
+                elif key in ("parameters", "variables") and isinstance(value, dict):
+                    formatted_params = []
+                    for p_name, p_details in value.items():
+                        if isinstance(p_details, dict):
+                            p_type = p_details["type"]
+                            p_default = p_details.get("default_value", None)
+
+                            if p_default is not None:
+                                formatted_params.append(f"• {p_name} [{p_type}] -> Default: {p_default}")
+                            else:
+                                formatted_params.append(f"• {p_name}: {p_type}")
+                        else:
+                            formatted_params.append(f"• {p_name}: {p_details}")
+                    pl_row[key] = "\n".join(formatted_params)
+                    continue
                 pl_row[key] = value
 
         pipeline_summary_rows.append(pl_row)
@@ -192,41 +207,37 @@ def activity_analysis(adf_json: dict):
             for row in all_rows:
                 activity_type = row["type"]
                 activity_grouped_by_type.setdefault(activity_type, []).append(row)
-               
+
+    # --- 1. Generate the Navigation DataFrame first ---
+    nav_df = build_navigation_dataframe(master_activity_list)
+    
+    # Merge Dataset and Linked Service summaries into one deduplicated view
+    merged_references = (
+        nav_df.dropna(subset=["Dataset", "Linked Service"], how="all")
+        [["Pipeline Name", "Dataset", "Linked Service"]]
+        .drop_duplicates()
+        .sort_values(["Pipeline Name"])
+    )
+    clean_nav_df = nav_df.drop(columns=["Dataset", "Linked Service"]).drop_duplicates()
+
+    # --- 2. Write everything to a single Excel file ---
     with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx", engine='openpyxl') as writer:
-        # --- Write New Pipeline Summary Sheet ---
+        
+        # Sheet 1: Pipeline Summary
         df_pipelines = pd.DataFrame(pipeline_summary_rows)
         df_pipelines.to_excel(writer, index=False, sheet_name="pipeline_summary")
+        
+        # Sheet 2: Master Navigation
+        clean_nav_df.to_excel(writer, index=False, sheet_name="pipeline_activity_navigation")
+        
+        # Sheet 3: Merged Dataset & Linked Service References
+        merged_references.to_excel(writer, index=False, sheet_name="pipeline_references")
 
-        # --- Write Activity Sheets ---
+        # Sheet 4+: Individual Activity Sheets
         for acti_types, acti_rows in activity_grouped_by_type.items():
             df = pd.DataFrame(acti_rows)
             sheet_name = acti_types[:31]
             df.to_excel(writer, index=False, sheet_name=sheet_name)
-            
-    # --- 2. Write the new Navigation Sheet ---
-    nav_df = build_navigation_dataframe(master_activity_list)
-    
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Navigation.xlsx", engine='openpyxl') as nav_writer:
-        # 1. Master Navigation Sheet (Every Activity)
-        nav_df.to_excel(nav_writer, index=False, sheet_name="pipeline_activity_navigation")
-        
-        # 2. Pipeline to Dataset Summary Sheet
-        dataset_rows = (
-            nav_df.dropna(subset=["Dataset"])[["Pipeline Name", "Dataset"]]
-            .drop_duplicates()
-            .sort_values(["Dataset", "Pipeline Name"])
-        )
-        dataset_rows.to_excel(nav_writer, index=False, sheet_name="pipeline_to_dataset")
-        
-        # 3. Pipeline to Linked Service Summary Sheet
-        ls_rows = (
-            nav_df.dropna(subset=["Linked Service"])[["Pipeline Name", "Linked Service"]]
-            .drop_duplicates()
-            .sort_values(["Linked Service", "Pipeline Name"])
-        )
-        ls_rows.to_excel(nav_writer, index=False, sheet_name="pipeline_to_linked_service")
-
 
 if __name__ == "__main__":
 

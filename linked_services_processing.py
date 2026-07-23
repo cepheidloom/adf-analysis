@@ -26,6 +26,21 @@ def export_linked_services_to_excel(adf_json: dict):
         row_data = {"linked_service_name": ls_name}
         for key,value in properties.items():
             property_level_fields.add(key)
+            if key == "parameters" and isinstance(value, dict):
+                formatted_params = []
+                for p_name, p_details in value.items():
+                    if isinstance(p_details, dict):
+                        p_type = p_details["type"]
+                        p_default = p_details.get("default_value", None)
+
+                        if p_default is not None:
+                            formatted_params.append(f"• {p_name} [{p_type}] -> Default: {p_default}")
+                        else:
+                            formatted_params.append(f"• {p_name}: {p_type}")
+                    else:
+                        formatted_params.append(f"• {p_name}: {p_details}")
+                row_data[key] = "\n".join(formatted_params)
+                continue
             if isinstance(value,(dict, list)):
                 row_data[key] = json.dumps(value)
             else:
