@@ -6,8 +6,12 @@
 # from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # from openpyxl.utils import get_column_letter
 
-# JSONL_FILE = "_DATA_AND_OUTPUTS/runs_data/21May-7July__shell-32-eun-adf-okjtarmveaftjxpeuzj_runs.jsonl"
-# OUTPUT_FILE = "pipeline_analysis.xlsx"
+
+# with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
+#         config_yaml = yaml.safe_load(f)
+
+# JSONL_FILE = config_yaml["jsonl_input_file"]
+# OUTPUT_FILE = "_DATA_AND_OUTPUTS/presentable_outputs/pipeline_parameters.xlsx"
 
 # # ─────────────────────────────────────────────
 # # READER
@@ -348,9 +352,13 @@
 
 import json
 import pandas as pd
+import yaml
 from collections import defaultdict
 
-INPUT_FILE = "_DATA_AND_OUTPUTS/runs_data/21May-7July__shell-32-eun-adf-okjtarmveaftjxpeuzj_runs.jsonl"
+with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
+        config_yaml = yaml.safe_load(f)
+
+INPUT_FILE = config_yaml["jsonl_input_file"]
 OUTPUT_FILE = "_DATA_AND_OUTPUTS/presentable_outputs/pipeline_parameters.xlsx"
 
 
@@ -384,7 +392,8 @@ def load_runs(path):
     return runs
 
 
-def build_pipeline_param_summary(runs):
+def build_pipeline_param_summaries(runs):
+    # Initializes dictionary to aggregate run counts and deduplicate parameter values
     pipeline_data = defaultdict(lambda: {"run_count": 0, "params": defaultdict(set)})
 
     for run in runs:
@@ -394,29 +403,51 @@ def build_pipeline_param_summary(runs):
 
         params = run.get("pipeline_parameters") or {}
         for param_name, param_val in params.items():
+            # Recursively strip wrapper dicts to extract raw values
             normalized = normalize_value(param_val)
             entry["params"][param_name].add(normalized)
 
-    rows = []
+    aggregated_rows = []
+    unpivoted_rows = []
+
     for pipeline_name, info in pipeline_data.items():
         formatted_parts = []
+        
         for param_name, value_set in sorted(info["params"].items()):
+            # 1. Build the aggregated string for your original sheet[cite: 3]
             values_str = ", ".join(sorted(str(v) for v in value_set))
             formatted_parts.append(f"{param_name}: [{values_str}]")
 
-        rows.append({
+            # 2. Build the individual rows for the new Unpivoted sheet
+            for val in sorted(value_set):
+                unpivoted_rows.append({
+                    "Pipeline Name": pipeline_name,
+                    "Parameter Name": param_name,
+                    "Parameter Value": str(val)
+                })
+
+        # Append the rolled-up pipeline data for the first sheet[cite: 3]
+        aggregated_rows.append({
             "pipeline_name": pipeline_name,
             "run_count": info["run_count"],
             "distinct_param_count": len(info["params"]),
             "parameters": "\n".join(formatted_parts)
         })
 
-    return rows
+    return aggregated_rows, unpivoted_rows
 
 
+# --- Execution and Excel Export ---
+# Load the run records from the provided JSONL path[cite: 3]
 runs = load_runs(INPUT_FILE)
-rows = build_pipeline_param_summary(runs)
+agg_rows, unpivoted_rows = build_pipeline_param_summaries(runs)
 
-df = pd.DataFrame(rows)
-df.to_excel(OUTPUT_FILE, index=False, engine="openpyxl")
-print(f"Wrote {len(rows)} pipelines to {OUTPUT_FILE}")  
+df_agg = pd.DataFrame(agg_rows)
+df_unpivoted = pd.DataFrame(unpivoted_rows)
+
+# Use Pandas ExcelWriter to output multiple sheets to the same workbook[cite: 3]
+with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
+    df_unpivoted.to_excel(writer, index=False, sheet_name="Pipeline_Parameters")
+    df_agg.to_excel(writer, index=False, sheet_name="Aggregated_Parameters")
+
+print(f"Wrote {len(agg_rows)} aggregated pipelines and {len(unpivoted_rows)} unpivoted parameter rows to {OUTPUT_FILE}")
