@@ -4,16 +4,11 @@ import yaml
 from collections import defaultdict
 
 def export_linked_services_to_excel(adf_json: dict):
-    # Tracking for summary sheet
-    top_level_fields = set()
-    property_level_fields = set() 
+    # Tracking for summary sheet 
     type_counts = defaultdict(int)
 
     ls_grouped_by_type = {}
     for ls_name, ls_data in adf_json["linked_services"].items():
-        for field in ls_data:
-            top_level_fields.add(field)
-
         properties = ls_data["properties"]
         ls_type = properties["type"]
         
@@ -25,7 +20,6 @@ def export_linked_services_to_excel(adf_json: dict):
 
         row_data = {"linked_service_name": ls_name}
         for key,value in properties.items():
-            property_level_fields.add(key)
             if key == "parameters" and isinstance(value, dict):
                 formatted_params = []
                 for p_name, p_details in value.items():
@@ -55,25 +49,7 @@ def export_linked_services_to_excel(adf_json: dict):
         df_counts = pd.DataFrame(sorted_counts, columns=["Linked Service Type", "Count"])
 
         df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
-        df_top = pd.DataFrame(sorted(list(top_level_fields)), columns=["Top Level Fields"])
-        df_prop = pd.DataFrame(sorted(list(property_level_fields)), columns=["Property Level Fields"])
-
         df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
-        df_top.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=3)
-        df_prop.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=5)
-
-        worksheet = writer.sheets[summary_sheet_name]
-        for col in worksheet.columns:
-            max_length = 0
-            column_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except Exception:
-                    pass
-            worksheet.column_dimensions[column_letter].width = max_length + 2
-
 
         # ==========================================
         # 2. WRITE INDIVIDUAL TYPE SHEETS

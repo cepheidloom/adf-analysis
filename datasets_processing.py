@@ -5,21 +5,14 @@ from collections import defaultdict
 
 
 def export_datasets_to_excel(adf_json: dict):
-    total_dataset_count = len(adf_json["datasets"])
-    top_level_fields = set()
-    property_level_fields = set()
     type_counts = defaultdict(int)
-
     ds_grouped_by_type = {}
-    for ds_name, ds_content in adf_json["datasets"].items():
-        top_level_fields.update(ds_content.keys())
 
+    for ds_name, ds_content in adf_json["datasets"].items():
         properties = ds_content["properties"]
         ds_type = properties["type"]
 
         type_counts[ds_type] += 1
-        property_level_fields.update(properties.keys())
-
         if "Datasets Navigation" not in ds_grouped_by_type:
             ds_grouped_by_type["Datasets Navigation"] = []
         ds_grouped_by_type["Datasets Navigation"].append({"name": ds_name, "type": ds_type})
@@ -44,6 +37,21 @@ def export_datasets_to_excel(adf_json: dict):
                         stacked_items.append(f"{loc_key}: {loc_val}")
                     row_data[key] = "\n".join(stacked_items)
                     continue
+                if key == "parameters" and isinstance(value, dict):
+                    formatted_params = []
+                    for p_name, p_details in value.items():
+                        if isinstance(p_details, dict):
+                            p_type = p_details["type"]
+                            p_default = p_details.get("default_value", None)
+    
+                            if p_default is not None:
+                                formatted_params.append(f"• {p_name} [{p_type}] -> Default: {p_default}")
+                            else:
+                                formatted_params.append(f"• {p_name}: {p_type}")
+                        else:
+                            formatted_params.append(f"• {p_name}: {p_details}")
+                    row_data[key] = "\n".join(formatted_params)
+                    continue
                 row_data[key] = json.dumps(value)
             else:
                 row_data[key] = value
@@ -56,26 +64,10 @@ def export_datasets_to_excel(adf_json: dict):
         sorted_counts = sorted(type_counts.items(), key=lambda x:x[1], reverse=True)
         df_counts = pd.DataFrame(sorted_counts, columns=["Dataset Type", "Count"])
         df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
-        df_top = pd.DataFrame(sorted(list(top_level_fields)), columns=["Top Level Fields"])
-        df_prop = pd.DataFrame(sorted(list(property_level_fields)), columns=["Property Level Fields"])
-
         df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
-        df_top.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=3)
-        df_prop.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=5)
+    
 
-        worksheet = writer.sheets[summary_sheet_name]
-        for col in worksheet.columns:
-            max_length = 0
-            column_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except Exception:
-                    pass
-            worksheet.column_dimensions[column_letter].width = max_length + 2
-
-            # ==========================================
+        # ==========================================
         # 2. WRITE INDIVIDUAL TYPE SHEETS
         # ==========================================
         for ds_type, rows in ds_grouped_by_type.items():
