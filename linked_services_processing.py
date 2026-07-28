@@ -56,7 +56,6 @@ def export_linked_services_to_excel(adf_json: dict):
         # ==========================================
         for ls_type, rows in ls_grouped_by_type.items():
             df = pd.DataFrame(rows)
-            df.fillna("None", inplace=True)
             sheet_name = ls_type[:31]
             df.to_excel(writer, index=False, sheet_name=sheet_name)
             

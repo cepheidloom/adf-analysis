@@ -72,7 +72,6 @@ def export_datasets_to_excel(adf_json: dict):
         # ==========================================
         for ds_type, rows in ds_grouped_by_type.items():
             df = pd.DataFrame(rows)
-            df.fillna("None", inplace=True)
             sheet_name = ds_type[:31]
             df.to_excel(writer, index=False, sheet_name=sheet_name)
 
