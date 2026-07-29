@@ -1,0 +1,5 @@
+pandas
+openpyxl
+azure-identity
+azure-mgmt-datafactory
+pyyaml
