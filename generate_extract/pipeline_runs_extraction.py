@@ -11,6 +11,8 @@ from azure.mgmt.datafactory.models import (
 )
 import yaml
 # --- Configuration ---
+os.makedirs("_DATA_AND_OUTPUTS/runs_data", exist_ok=True)
+
 with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
     config_yaml = yaml.safe_load(f)
     
@@ -22,8 +24,8 @@ LOOKBACK_DAYS = 45
 
 PIPELINES_TO_SKIP = []
 
-OUTPUT_FILE = f"_DATA_AND_OUTPUTS/{FACTORY_NAME}_runs.jsonl"
-CHECKPOINT_FILE = f"_DATA_AND_OUTPUTS/{FACTORY_NAME}_checkpoint.json"
+OUTPUT_FILE = f"_DATA_AND_OUTPUTS/runs_data/{FACTORY_NAME}_runs.jsonl"
+CHECKPOINT_FILE = f"_DATA_AND_OUTPUTS/runs_data/{FACTORY_NAME}_checkpoint.json"
 
 # --- Helpers ---
 def save_checkpoint(token, runs_written, pages_fetched):

@@ -1,9 +1,11 @@
+import os
 import json
 from datetime import datetime, timezone
 from azure.identity import InteractiveBrowserCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
 import yaml
 
+os.makedirs("_DATA_AND_OUTPUTS", exist_ok=True)
 # --- Configuration ---
 with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
     config_yaml = yaml.safe_load(f)
@@ -163,6 +165,7 @@ try:
         factory_dump["change_data_capture"][cdc.name] = cdc_def.as_dict()
 except Exception as e:
     factory_dump["change_data_capture"]["error"] = str(e)
+
 
 
 # ── Save ───────────────────────────────────────────────────────────────────────

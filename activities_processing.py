@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import yaml
@@ -220,6 +221,8 @@ def activity_analysis(adf_json: dict):
     )
     clean_nav_df = nav_df.drop(columns=["Dataset", "Linked Service"]).drop_duplicates()
 
+    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
+    
     # --- 2. Write everything to a single Excel file ---
     with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx", engine='openpyxl') as writer:
         

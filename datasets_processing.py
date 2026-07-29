@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import yaml
@@ -59,6 +60,7 @@ def export_datasets_to_excel(adf_json: dict):
             ds_grouped_by_type[ds_type] = []
         ds_grouped_by_type[ds_type].append(row_data)
 
+    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
     with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Datasets.xlsx", engine='openpyxl') as writer:
         summary_sheet_name = "Summary"
         sorted_counts = sorted(type_counts.items(), key=lambda x:x[1], reverse=True)

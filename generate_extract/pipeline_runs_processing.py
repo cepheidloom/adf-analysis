@@ -1,3 +1,4 @@
+import os
 import json
 import pandas as pd
 import yaml
@@ -139,6 +140,8 @@ if __name__ == "__main__":
     df_unpivoted = pd.DataFrame(unpivoted_rows)
     df_summary = pd.DataFrame(summary_rows)
     # df_all_runs = pd.DataFrame(all_runs_rows)
+
+    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
 
     # Write to Excel
     with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:

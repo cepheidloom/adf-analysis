@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import yaml
@@ -42,6 +43,8 @@ def export_linked_services_to_excel(adf_json: dict):
         if ls_type not in ls_grouped_by_type:
             ls_grouped_by_type[ls_type] = []
         ls_grouped_by_type[ls_type].append(row_data)
+
+    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
 
     with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Linked_services.xlsx", engine='openpyxl') as writer:
         summary_sheet_name = "Summary"

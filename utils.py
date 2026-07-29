@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import yaml
@@ -88,6 +89,7 @@ def get_pipeline_names(adf_json: dict, print_or_output: bool) -> list:
         for i in pl_list: print(i)
     else:
         df = pd.DataFrame(pl_list, columns=['pipeline', 'folder'])
+        os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
         df.to_excel("_DATA_AND_OUTPUTS/presentable_outputs/pipelines.xlsx", index=False, sheet_name = "pipelines")
 
 
@@ -268,6 +270,7 @@ if __name__ == "__main__":
     # *****-------------*****
     # ---- Configuration ----
     # *****-------------*****
+    os.makedirs("_DATA_AND_OUTPUTS", exist_ok=True)
     with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
         config_yaml = yaml.safe_load(f)
 
