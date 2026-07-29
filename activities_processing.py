@@ -263,13 +263,23 @@ if __name__ == "__main__":
     ################################################
     #######@@@ Analyze Activity Instances @@@#######
     ################################################
+    # # Inspect raw fields of a specific activity type
+    # # Useful for understanding what keys/subfields a
+    # # particular activity type exposes in your ADF extract.
+    
+    # # Change "Copy" to any activity type you want to inspect
+    # # (e.g. "Lookup", "Script", "ForEach", "Switch", etc.)
+    
+    # # top_level_fields → all keys present on that activity
+    # # subfields_set    → keys inside a chosen nested field (e.g. "source")
+
     # top_level_fields = set()
     # subfields_set = set()
     # values_set = set()
     # for act in gather_all_instances(adf_json, "Copy"):
     #     top_level_fields.update(act.keys())
     #     for key, item in act.items():
-    #         if key == "source": #and isinstance(item, dict):
+    #         if key == "source": #and isinstance(item, dict): # change to any nested field you want to drill into
     #             # values_set.add(["type"])
     #             subfields_set.update(item.keys())
     # # print(top_level_fields)

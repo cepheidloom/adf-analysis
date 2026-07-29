@@ -5,12 +5,6 @@ import yaml
 from collections import defaultdict
 from datetime import datetime
 
-with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
-        config_yaml = yaml.safe_load(f)
-
-INPUT_FILE = config_yaml["jsonl_input_file"]
-OUTPUT_FILE = "_DATA_AND_OUTPUTS/presentable_outputs/pipeline_parameters.xlsx"
-
 
 def normalize_value(val):
     """Recursively strip expression-wrapper dicts down to just their 'value'."""
@@ -129,6 +123,12 @@ def build_all_runs(runs):
 
 
 if __name__ == "__main__":
+    with open("_DATA_AND_OUTPUTS/config.yaml", "r") as f:
+        config_yaml = yaml.safe_load(f)
+
+    INPUT_FILE = config_yaml["jsonl_input_file"]
+    OUTPUT_FILE = "_DATA_AND_OUTPUTS/presentable_outputs/pipeline_parameters.xlsx"
+
     runs = load_runs(INPUT_FILE)
     
     # Build datasets

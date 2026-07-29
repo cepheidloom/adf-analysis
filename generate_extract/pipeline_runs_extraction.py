@@ -20,9 +20,9 @@ SUBSCRIPTION_ID = config_yaml["subscription_id"]
 RESOURCE_GROUP = config_yaml["resource_group"]
 FACTORY_NAME = config_yaml["factory_name"]
 
-LOOKBACK_DAYS = 45
+LOOKBACK_DAYS = 45 # last N number of days for which runs are required
 
-PIPELINES_TO_SKIP = []
+PIPELINES_TO_SKIP = [] # mention pipelines to skip in pipelines fetching
 
 OUTPUT_FILE = f"_DATA_AND_OUTPUTS/runs_data/{FACTORY_NAME}_runs.jsonl"
 CHECKPOINT_FILE = f"_DATA_AND_OUTPUTS/runs_data/{FACTORY_NAME}_checkpoint.json"

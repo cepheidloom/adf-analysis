@@ -36,13 +36,13 @@ def print_linked_service_type_properties(adf_json: dict):
     for i in property_level_fields: print(i)
 
 def print_basic_information_of_factory(adf_json: dict):
-    print(f"Stats for factory: {adf_json["factory_name"]}")
-    print(f"Total Linked Services: {len(adf_json["linked_services"])}")
-    print(f"Total Datasets: {len(adf_json["datasets"])}")
-    print(f"Total Pipelines: {len(adf_json["pipelines"])}")
-    print(f"Total Data Flows: {len(adf_json["data_flows"])}")
-    print(f"Total Triggers: {len(adf_json["triggers"])}")
-    print(f"Total Integration Runtimes: {len(adf_json["integration_runtimes"])}")
+    print(f"Stats for factory:", adf_json["factory_name"])
+    print(f"Total Linked Services:", len(adf_json["linked_services"]))
+    print(f"Total Datasets:", len(adf_json["datasets"]))
+    print(f"Total Pipelines:", len(adf_json["pipelines"]))
+    print(f"Total Data Flows:", len(adf_json["data_flows"]))
+    print(f"Total Triggers:", len(adf_json["triggers"]))
+    print(f"Total Integration Runtimes:", len(adf_json["integration_runtimes"]))
 
 
 def print_trigger_info(adf_json: dict):
@@ -88,8 +88,8 @@ def get_pipeline_names(adf_json: dict, print_or_output: bool) -> list:
     if print_or_output:
         for i in pl_list: print(i)
     else:
-        df = pd.DataFrame(pl_list, columns=['pipeline', 'folder'])
         os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
+        df = pd.DataFrame(pl_list, columns=['pipeline', 'folder'])
         df.to_excel("_DATA_AND_OUTPUTS/presentable_outputs/pipelines.xlsx", index=False, sheet_name = "pipelines")
 
 
@@ -279,17 +279,17 @@ if __name__ == "__main__":
     with open(json_path, "r") as f:
         adf_json = json.load(f)
 
-    # # ##############################################################
-    # # Get Activities(Lookup, SqlServerStoredProcedure, Script)
-    # # ##############################################################
-    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
-    #     json.dump(get_lookup_sp_var_activities(adf_json), f, indent=4)
+    # ##############################################################
+    # Get Activities(Lookup, SqlServerStoredProcedure, Script)
+    # ##############################################################
+    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "w", encoding="utf-8") as f:
+        json.dump(get_lookup_sp_var_activities(adf_json), f, indent=4)
 
-    # ##########################
-    # # Get queries and sp names
-    # ##########################
-    # with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
-    #     lookup_sp_getvar_json = json.load(f)
+    ##########################
+    # Get queries and sp names
+    ##########################
+    with open("_DATA_AND_OUTPUTS/lookup_sp_getvar.json", "r") as f:
+        lookup_sp_getvar_json = json.load(f)
 
-    # with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
-    #     json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
+    with open("_DATA_AND_OUTPUTS/sp_and_queries.json", "w", encoding="utf-8") as f:
+        json.dump(analyze_lookup(lookup_sp_getvar_json), f, indent=4)
