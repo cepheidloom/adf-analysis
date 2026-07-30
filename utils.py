@@ -279,6 +279,8 @@ if __name__ == "__main__":
     with open(json_path, "r") as f:
         adf_json = json.load(f)
 
+    os.makedirs("_DATA_AND_OUTPUTS", exist_ok=True)
+
     # ##############################################################
     # Get Activities(Lookup, SqlServerStoredProcedure, Script)
     # ##############################################################
