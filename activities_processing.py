@@ -2,8 +2,6 @@ import os
 import pandas as pd
 import json
 import yaml
-# from collections import defaultdict
-
 
 def collect_activities_by_type(activity_json: dict, target_type: str, matches: list):
     """Walks the full nested tree and collects every activity dict matching target_type."""
@@ -97,7 +95,6 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
     activity_type = activity_json["type"]
     new_lineage = lineage + [f"{activity_type}: {activity_json.get('name', '')}"]
 
-
     if activity_type == "Switch":
         for case in activity_json.get("cases", []):
             case_lineage = new_lineage[:-1] + [f"Switch case: {case.get('name', '')}"]
@@ -105,7 +102,6 @@ def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list
                 rows.extend(parse_type_activities(child, pipeline_name, case_lineage))
         for child in activity_json.get("default_activities", []):
             rows.extend(parse_type_activities(child, pipeline_name, new_lineage))
-
 
     elif activity_type == "IfCondition":
         for child in activity_json.get("if_true_activities", []):
@@ -123,7 +119,6 @@ def build_navigation_dataframe(master_activity_list: list) -> pd.DataFrame:
     nav_rows = []
     
     for row in master_activity_list:
-        # 1. Extract the base metadata you're already capturing
         base_info = {
             "Pipeline Name": row.get("pipeline_name", ""),
             "Full Path": row.get("parent_path", ""),
@@ -136,24 +131,19 @@ def build_navigation_dataframe(master_activity_list: list) -> pd.DataFrame:
         datasets = set()
         linked_services = set()
         
-        # 2. Hunt for Datasets based on your parse_type_activities keys
         if "inputs_dataset" in row: datasets.add(row["inputs_dataset"])
         if "outputs_dataset" in row: datasets.add(row["outputs_dataset"])
         if "dataset" in row: datasets.add(row["dataset"])
         
-        # 3. Hunt for Linked Services based on your keys
         if "linked_service_name" in row: linked_services.add(row["linked_service_name"])
         if "auth_linked_service" in row: linked_services.add(row["auth_linked_service"])
         
-        # Split out the web_linked_services string (since you formatted it with \n earlier)
         if "web_linked_services" in row and row["web_linked_services"]:
             for ls in row["web_linked_services"].split("\n"):
                 if ls.strip():
                     linked_services.add(ls.strip())
                     
-        # 4. Generate the unpivoted rows
         if not datasets and not linked_services:
-            # Independent activity (Wait, SetVariable, etc.)
             nav_rows.append({**base_info, "Dataset": None, "Linked Service": None})
         else:
             for ds in datasets:
@@ -161,18 +151,20 @@ def build_navigation_dataframe(master_activity_list: list) -> pd.DataFrame:
             for ls in linked_services:
                 nav_rows.append({**base_info, "Dataset": None, "Linked Service": ls})
                 
-    # Return as a DataFrame and drop any accidental duplicates
     return pd.DataFrame(nav_rows).drop_duplicates()
 
 
-def activity_analysis(adf_json: dict):
+def get_activities_dataframes(adf_json: dict) -> dict:
+    """
+    Parses the ADF JSON and returns a dictionary of Pandas DataFrames.
+    Keys are the sheet/type names, values are the DataFrames.
+    """
     activity_grouped_by_type = {}
-    master_activity_list = []  # <-- The Interceptor List
+    master_activity_list = []
     pipeline_summary_rows = []
     
     for pl_name, pl_content in adf_json["pipelines"].items():
-
-        # --- Exract top-level pipeline fields ---
+        # --- Extract top-level pipeline fields ---
         pl_row = {"pipeline_name": pl_name}
         for key, value in pl_content.items():
             if key not in ("activities", "id", "name", "type", "etag"):
@@ -199,20 +191,16 @@ def activity_analysis(adf_json: dict):
         pipeline_summary_rows.append(pl_row)
 
         for acti in pl_content["activities"]:
-            # Get the parsed rows exactly as you already do
             all_rows = parse_type_activities(acti, pl_name, [])
-            
-            # Intercept all raw rows into our massive flat list before grouping!
             master_activity_list.extend(all_rows)
             
             for row in all_rows:
                 activity_type = row["type"]
                 activity_grouped_by_type.setdefault(activity_type, []).append(row)
 
-    # --- 1. Generate the Navigation DataFrame first ---
+    # --- Generate Navigation DataFrames ---
     nav_df = build_navigation_dataframe(master_activity_list)
     
-    # Merge Dataset and Linked Service summaries into one deduplicated view
     merged_references = (
         nav_df.dropna(subset=["Dataset", "Linked Service"], how="all")
         [["Pipeline Name", "Dataset", "Linked Service"]]
@@ -221,26 +209,41 @@ def activity_analysis(adf_json: dict):
     )
     clean_nav_df = nav_df.drop(columns=["Dataset", "Linked Service"]).drop_duplicates()
 
-    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
-    
-    # --- 2. Write everything to a single Excel file ---
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx", engine='openpyxl') as writer:
-        
-        # Sheet 1: Pipeline Summary
-        df_pipelines = pd.DataFrame(pipeline_summary_rows)
-        df_pipelines.to_excel(writer, index=False, sheet_name="pipeline_summary")
-        
-        # Sheet 2: Master Navigation
-        clean_nav_df.to_excel(writer, index=False, sheet_name="pipeline_activity_navigation")
-        
-        # Sheet 3: Merged Dataset & Linked Service References
-        merged_references.to_excel(writer, index=False, sheet_name="pipeline_references")
+    # --- Pack everything into a Dictionary ---
+    dataframes = {}
+    dataframes["pipeline_summary"] = pd.DataFrame(pipeline_summary_rows)
+    dataframes["pipeline_activity_navigation"] = clean_nav_df
+    dataframes["pipeline_references"] = merged_references
 
-        # Sheet 4+: Individual Activity Sheets
-        for acti_types, acti_rows in activity_grouped_by_type.items():
-            df = pd.DataFrame(acti_rows)
-            sheet_name = acti_types[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
+    for acti_types, acti_rows in activity_grouped_by_type.items():
+        dataframes[acti_types] = pd.DataFrame(acti_rows)
+
+    return dataframes
+
+
+def export_activities_to_excel(dataframes: dict, output_path: str = "_DATA_AND_OUTPUTS/presentable_outputs/Activities.xlsx"):
+    """
+    Takes a dictionary of DataFrames and writes them to an Excel workbook with specific sheet ordering.
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        
+        # 1. Force explicit core sheets in order
+        explicit_sheets = ["pipeline_summary", "pipeline_activity_navigation", "pipeline_references"]
+        
+        for sheet in explicit_sheets:
+            if sheet in dataframes:
+                dataframes[sheet].to_excel(writer, index=False, sheet_name=sheet)
+
+        # 2. Write all individual activity sheets dynamically
+        for sheet_name, df in dataframes.items():
+            if sheet_name in explicit_sheets:
+                continue
+            
+            # Excel sheet names cannot exceed 31 characters
+            df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+
 
 if __name__ == "__main__":
 
@@ -256,9 +259,14 @@ if __name__ == "__main__":
         adf_json = json.load(f)
 
     ###################################
-    #######@@@ Function Call @@@#######
+    #######@@@ Execution Flow @@@######
     ###################################
-    activity_analysis(adf_json)
+    
+    # 1. Get the dictionary of DataFrames
+    dfs = get_activities_dataframes(adf_json)
+    
+    # 2. Export them to Excel
+    export_activities_to_excel(dfs)
 
     ################################################
     #######@@@ Analyze Activity Instances @@@#######

@@ -4,11 +4,15 @@ import json
 import yaml
 from collections import defaultdict
 
-
-def export_datasets_to_excel(adf_json: dict):
+def get_datasets_dataframes(adf_json: dict) -> dict:
+    """
+    Parses the ADF JSON and returns a dictionary of Pandas DataFrames.
+    Keys are the sheet/type names, values are the DataFrames.
+    """
     type_counts = defaultdict(int)
     ds_grouped_by_type = {}
 
+    # --- 1. Parse JSON into Python Dictionaries ---
     for ds_name, ds_content in adf_json["datasets"].items():
         properties = ds_content["properties"]
         ds_type = properties["type"]
@@ -19,12 +23,12 @@ def export_datasets_to_excel(adf_json: dict):
         ds_grouped_by_type["Datasets Navigation"].append({"name": ds_name, "type": ds_type})
         
         row_data = {"dataset_name": ds_name}
-        for key,value in properties.items():
-            if isinstance(value, (dict,list)):
-                if key=="linked_service_name":
+        for key, value in properties.items():
+            if isinstance(value, (dict, list)):
+                if key == "linked_service_name":
                     row_data[key] = value["reference_name"]
                     continue
-                if key=="folder":
+                if key == "folder":
                     row_data[key] = value["name"]
                     continue
                 if key == "relative_url":
@@ -60,22 +64,44 @@ def export_datasets_to_excel(adf_json: dict):
             ds_grouped_by_type[ds_type] = []
         ds_grouped_by_type[ds_type].append(row_data)
 
-    os.makedirs("_DATA_AND_OUTPUTS/presentable_outputs", exist_ok=True)
-    with pd.ExcelWriter("_DATA_AND_OUTPUTS/presentable_outputs/Datasets.xlsx", engine='openpyxl') as writer:
-        summary_sheet_name = "Summary"
-        sorted_counts = sorted(type_counts.items(), key=lambda x:x[1], reverse=True)
-        df_counts = pd.DataFrame(sorted_counts, columns=["Dataset Type", "Count"])
-        df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
-        df_counts.to_excel(writer, index=False, sheet_name=summary_sheet_name, startcol=0)
+    # --- 2. Convert Dictionaries to DataFrames ---
+    dataframes = {}
     
+    # Build Summary DataFrame
+    sorted_counts = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)
+    df_counts = pd.DataFrame(sorted_counts, columns=["Dataset Type", "Count"])
+    df_counts.loc[len(df_counts)] = ["TOTAL", df_counts["Count"].sum()]
+    dataframes["Summary"] = df_counts
+    
+    # Build Individual Type DataFrames
+    for ds_type, rows in ds_grouped_by_type.items():
+        dataframes[ds_type] = pd.DataFrame(rows)
+        
+    return dataframes
 
-        # ==========================================
-        # 2. WRITE INDIVIDUAL TYPE SHEETS
-        # ==========================================
-        for ds_type, rows in ds_grouped_by_type.items():
-            df = pd.DataFrame(rows)
-            sheet_name = ds_type[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+def export_datasets_to_excel(dataframes: dict, output_path: str = "_DATA_AND_OUTPUTS/presentable_outputs/Datasets.xlsx"):
+    """
+    Takes a dictionary of DataFrames and writes them to an Excel workbook.
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        # 1. Force Summary sheet to be first
+        if "Summary" in dataframes:
+            dataframes["Summary"].to_excel(writer, index=False, sheet_name="Summary")
+            
+        # 2. Force Datasets Navigation to be second
+        if "Datasets Navigation" in dataframes:
+            dataframes["Datasets Navigation"].to_excel(writer, index=False, sheet_name="Datasets Navigation")
+
+        # 3. Write all remaining sheets dynamically
+        for sheet_name, df in dataframes.items():
+            if sheet_name in ("Summary", "Datasets Navigation"):
+                continue
+            
+            # Excel sheet names cannot exceed 31 characters
+            df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
 
 
 if __name__ == "__main__":
@@ -92,6 +118,11 @@ if __name__ == "__main__":
         adf_json = json.load(f)
     
     ###################################
-    #######@@@ Function Call @@@#######
+    #######@@@ Execution Flow @@@######
     ###################################
-    export_datasets_to_excel(adf_json)
+    
+    # 1. Get the dictionary of DataFrames
+    dfs = get_datasets_dataframes(adf_json)
+    
+    # 2. Export them to Excel
+    export_datasets_to_excel(dfs)
