@@ -3,41 +3,6 @@ import pandas as pd
 import json
 import yaml
 
-def collect_activities_by_type(activity_json: dict, target_type: str, matches: list):
-    """Walks the full nested tree and collects every activity dict matching target_type."""
-    if activity_json.get("type") == target_type:
-        matches.append(activity_json)
-
-    activity_type = activity_json.get("type")
-
-    if activity_type == "Switch":
-        for case in activity_json.get("cases", []):
-            for child in case.get("activities", []):
-                collect_activities_by_type(child, target_type, matches)
-        for child in activity_json.get("default_activities", []):
-            collect_activities_by_type(child, target_type, matches)
-
-    elif activity_type == "IfCondition":
-        for child in activity_json.get("if_true_activities", []):
-            collect_activities_by_type(child, target_type, matches)
-        for child in activity_json.get("if_false_activities", []):
-            collect_activities_by_type(child, target_type, matches)
-
-    elif activity_type in ("ForEach", "Until"):
-        for child in activity_json.get("activities", []):
-            collect_activities_by_type(child, target_type, matches)
-
-    return matches
-
-
-def gather_all_instances(adf_json: dict, target_type: str) -> list:
-    """Runs the collector across every pipeline in the ADF extract."""
-    matches = []
-    for pl_name, pl_content in adf_json["pipelines"].items():
-        for acti in pl_content["activities"]:
-            collect_activities_by_type(acti, target_type, matches)
-    return matches
-
 
 def parse_type_activities(activity_json: dict, pipeline_name: str, lineage: list) -> list:
     rows = []
@@ -267,29 +232,3 @@ if __name__ == "__main__":
     
     # 2. Export them to Excel
     export_activities_to_excel(dfs)
-
-    ################################################
-    #######@@@ Analyze Activity Instances @@@#######
-    ################################################
-    # # Inspect raw fields of a specific activity type
-    # # Useful for understanding what keys/subfields a
-    # # particular activity type exposes in your ADF extract.
-    
-    # # Change "Copy" to any activity type you want to inspect
-    # # (e.g. "Lookup", "Script", "ForEach", "Switch", etc.)
-    
-    # # top_level_fields → all keys present on that activity
-    # # subfields_set    → keys inside a chosen nested field (e.g. "source")
-
-    # top_level_fields = set()
-    # subfields_set = set()
-    # values_set = set()
-    # for act in gather_all_instances(adf_json, "Copy"):
-    #     top_level_fields.update(act.keys())
-    #     for key, item in act.items():
-    #         if key == "source": #and isinstance(item, dict): # change to any nested field you want to drill into
-    #             # values_set.add(["type"])
-    #             subfields_set.update(item.keys())
-    # # print(top_level_fields)
-    # print(subfields_set)
-    # print(values_set)
